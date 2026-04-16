@@ -22,7 +22,7 @@ public:
     bool display[DISPLAY_WIDTH * DISPLAY_HEIGHT];
     uint8_t keypad[16]; 
     uint8_t delay_timer;
-    bool drawFlag; // NEW: Tells main loop when to refresh the screen
+    bool drawFlag; 
 
     Chip8() {
         pc = 0x200;
@@ -55,7 +55,7 @@ public:
     }
 
     void draw() {
-        printf("\033[H"); // Cursor to home
+        printf("\033[H"); 
         for (int y = 0; y < DISPLAY_HEIGHT; y++) {
             for (int x = 0; x < DISPLAY_WIDTH; x++) {
                 printf(display[y * DISPLAY_WIDTH + x] ? "##" : "  ");
@@ -81,42 +81,42 @@ public:
 
         switch(opcode & 0xF000) {
             case 0x0000:
-                if (opcode == 0x00E0) { // Clear Screen
+                if (opcode == 0x00E0) {
                     memset(display, false, sizeof(display));
                     drawFlag = true;
                     pc += 2;
-                } else if (opcode == 0x00EE) { // Return
+                } else if (opcode == 0x00EE) { 
                     sp--;
                     pc = stack[sp];
                     pc += 2;
                 }
                 break;
-            case 0x1000: pc = nnn; break; // Jump
-            case 0x2000: // Call
+            case 0x1000: pc = nnn; break; 
+            case 0x2000: 
                 stack[sp] = pc;
                 sp++;
                 pc = nnn;
                 break;
-            case 0x3000: // Skip if VX == NN
+            case 0x3000:
                 if (V[x] == nn) pc += 4;
                 else pc += 2;
                 break;
-            case 0x4000: // Skip if VX != NN
+            case 0x4000:
                 if (V[x] != nn) pc += 4;
                 else pc += 2;
                 break;
-            case 0x6000: V[x] = nn; pc += 2; break; // Set VX
-            case 0x7000: V[x] += nn; pc += 2; break; // Add VX
+            case 0x6000: V[x] = nn; pc += 2; break; 
+            case 0x7000: V[x] += nn; pc += 2; break; 
             
-            case 0x8000: // Math instructions (Pong needs these!)
+            case 0x8000: 
                 switch(opcode & 0x000F) {
                     case 0x0: V[x] = V[y]; break;
                     case 0x2: V[x] &= V[y]; break;
-                    case 0x4: // Add with carry
+                    case 0x4:
                         V[0xF] = (V[y] > (0xFF - V[x])) ? 1 : 0;
                         V[x] += V[y];
                         break;
-                    case 0x5: // Sub
+                    case 0x5: 
                         V[0xF] = (V[x] > V[y]) ? 1 : 0;
                         V[x] -= V[y];
                         break;
@@ -126,7 +126,7 @@ public:
 
             case 0xA000: I = nnn; pc += 2; break;
             case 0xC000: V[x] = (rand() % 256) & nn; pc += 2; break;
-            case 0xD000: { // Draw
+            case 0xD000: { 
                 uint8_t vx = V[x] % DISPLAY_WIDTH;
                 uint8_t vy = V[y] % DISPLAY_HEIGHT;
                 uint8_t height = opcode & 0x000F;
@@ -143,11 +143,11 @@ public:
                         }
                     }
                 }
-                drawFlag = true; // Signal a redraw is needed
+                drawFlag = true; 
                 pc += 2;
                 break;
             }
-            case 0xE000: pc += 2; break; // Skip keys for now
+            case 0xE000: pc += 2; break; 
             case 0xF000:
                 if (nn == 0x07) { V[x] = delay_timer; pc += 2; }
                 else if (nn == 0x15) { delay_timer = V[x]; pc += 2; }
@@ -171,24 +171,21 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    printf("\033[2J");   // Clear screen
-    printf("\033[?25l"); // Hide cursor (stops a lot of flashing!)
-
+    printf("\033[2J");  
+    printf("\033[?25l");
     while (true) {
-        // Run several CPU cycles per "frame"
         for(int i = 0; i < 10; i++) {
             myCpu.cycle();
         }
 
         myCpu.updateTimers();
 
-        // ONLY DRAW IF THE CPU CHANGED THE SCREEN
         if (myCpu.drawFlag) {
             myCpu.draw();
             myCpu.drawFlag = false;
         }
 
-        usleep(16000); // 60 FPS
+        usleep(16000);
     }
 
     return 0;
