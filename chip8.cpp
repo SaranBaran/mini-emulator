@@ -2,6 +2,8 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
+#include <fstream>
+#include <unistd.h> // for usleep
 
 #define MEMORY_SIZE 4096
 #define DISPLAY_WIDTH 64
@@ -16,6 +18,7 @@ public:
     uint16_t stack[16];
     uint8_t  sp;
     bool display[DISPLAY_WIDTH * DISPLAY_HEIGHT];
+    uint8_t keypad[16]; // Added inside the class
 
     Chip8() {
         pc = 0x200;
@@ -24,15 +27,31 @@ public:
         memset(memory, 0, MEMORY_SIZE);
         memset(V, 0, 16);
         memset(display, false, sizeof(display));
+        memset(keypad, 0, 16);
     }
 
-    // --- The Graphical Interface: Translating the array to the terminal ---
+    // New ROM loader inside the class
+    bool loadROM(const char* filename) {
+        std::ifstream file(filename, std::ios::binary | std::ios::ate);
+        if (file.is_open()) {
+            std::streampos size = file.tellg();
+            char* buffer = new char[size];
+            file.seekg(0, std::ios::beg);
+            file.read(buffer, size);
+            file.close();
+            for (long i = 0; i < size; ++i) {
+                memory[0x200 + i] = (uint8_t)buffer[i];
+            }
+            delete[] buffer;
+            return true;
+        }
+        return false;
+    }
+
     void draw() {
-        // This escape code clears the terminal screen and moves cursor to top
-        printf("\033[H\033[J"); 
+        printf("\033[H"); 
         for (int y = 0; y < DISPLAY_HEIGHT; y++) {
             for (int x = 0; x < DISPLAY_WIDTH; x++) {
-                // Draw a solid block for true, spaces for false
                 printf(display[y * DISPLAY_WIDTH + x] ? "##" : "  ");
             }
             printf("\n");
@@ -45,37 +64,50 @@ public:
     }
 
     void decode(uint16_t opcode) {
-        uint8_t first_nibble = (opcode & 0xF000) >> 12;
+        uint8_t x = (opcode & 0x0F00) >> 8;
+        uint8_t y = (opcode & 0x00F0) >> 4;
+        uint8_t nn = (opcode & 0x00FF);
+        uint16_t nnn = (opcode & 0x0FFF);
 
-        switch(first_nibble) {
-            case 0x1: // 1NNN: Jump
-                pc = (opcode & 0x0FFF);
+        switch(opcode & 0xF000) {
+            case 0x0000:
+                if (opcode == 0x00E0) { // Clear Screen
+                    memset(display, false, sizeof(display));
+                    pc += 2;
+                }
                 break;
-            
-            case 0x6: // 6XNN: Set VX to NN
-                V[(opcode & 0x0F00) >> 8] = (opcode & 0x00FF);
+            case 0x1000: // 1NNN: Jump
+                pc = nnn;
+                break;
+            case 0x3000: // 3XNN: Skip if VX == NN (Crucial for game logic!)
+                if (V[x] == nn) pc += 4;
+                else pc += 2;
+                break;
+            case 0x6000: // 6XNN: Set VX to NN
+                V[x] = nn;
                 pc += 2;
                 break;
-
-            case 0xA: // ANNN: Set Index Register I to NNN
-                I = (opcode & 0x0FFF);
+            case 0x7000: // 7XNN: Add NN to VX
+                V[x] += nn;
                 pc += 2;
                 break;
-
-            case 0xD: { // DXYN: The Draw Instruction
-                uint8_t x = V[(opcode & 0x0F00) >> 8] % DISPLAY_WIDTH;
-                uint8_t y = V[(opcode & 0x00F0) >> 4] % DISPLAY_HEIGHT;
+            case 0xA000: // ANNN: Set I to NNN
+                I = nnn;
+                pc += 2;
+                break;
+            case 0xD000: { // DXYN: Draw
+                uint8_t vx = V[x] % DISPLAY_WIDTH;
+                uint8_t vy = V[y] % DISPLAY_HEIGHT;
                 uint8_t height = opcode & 0x000F;
-                V[0xF] = 0; // Collision flag
-
+                V[0xF] = 0;
                 for (int row = 0; row < height; row++) {
                     uint8_t sprite_byte = memory[I + row];
                     for (int col = 0; col < 8; col++) {
                         if ((sprite_byte & (0x80 >> col)) != 0) {
-                            int idx = (x + col) + ((y + row) * DISPLAY_WIDTH);
+                            int idx = (vx + col) + ((vy + row) * DISPLAY_WIDTH);
                             if (idx < DISPLAY_WIDTH * DISPLAY_HEIGHT) {
                                 if (display[idx]) V[0xF] = 1; 
-                                display[idx] ^= true; // XOR!
+                                display[idx] ^= true;
                             }
                         }
                     }
@@ -83,7 +115,6 @@ public:
                 pc += 2;
                 break;
             }
-
             default:
                 pc += 2; 
                 break;
@@ -91,27 +122,22 @@ public:
     }
 };
 
-int main() {
+int main(int argc, char** argv) {
+    if (argc < 2) {
+        printf("Usage: ./chip8 <rom_path>\n");
+        return 1;
+    }
+
     Chip8 myCpu;
+    if (!myCpu.loadROM(argv[1])) {
+        printf("Could not find ROM file!\n");
+        return 1;
+    }
 
-    // --- Load a "Sprite" (A 5x5 Square) into memory at 0x050 ---
-    myCpu.memory[0x50] = 0xFF; // ********
-    myCpu.memory[0x51] = 0x81; // * *
-    myCpu.memory[0x52] = 0x81; // * *
-    myCpu.memory[0x53] = 0x81; // * *
-    myCpu.memory[0x54] = 0xFF; // ********
-
-    // --- Program: Tell the CPU to draw that sprite ---
-    myCpu.memory[0x200] = 0xA0; myCpu.memory[0x201] = 0x50; // Set I to 0x050
-    myCpu.memory[0x202] = 0x60; myCpu.memory[0x203] = 0x0A; // Set V0 (X pos) to 10
-    myCpu.memory[0x204] = 0x61; myCpu.memory[0x205] = 0x05; // Set V1 (Y pos) to 5
-    myCpu.memory[0x206] = 0xD0; myCpu.memory[0x207] = 0x15; // DRAW at (V0, V1) height 5
-    myCpu.memory[0x208] = 0x12; myCpu.memory[0x209] = 0x08; // Jump to 0x208 (Halt/Loop)
-
-    // Running the loop
-    for(int i = 0; i < 5; i++) {
+    while (true) {
         myCpu.cycle();
-        myCpu.draw(); // Update the graphical interface
+        myCpu.draw();
+        usleep(2000); // Wait 2 milliseconds (keeps speed playable)
     }
 
     return 0;
