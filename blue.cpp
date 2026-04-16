@@ -30,12 +30,12 @@ State STATE = FETCH;
 // Sample program based on your logic
 // F is NOP (15), A is JMP (10)
 uint16_t program0[6] = {
-    0xF000, // NOP
-    0xF003, // NOP
-    0xA004, // JMP to 004
-    0xF005, // NOP
-    0xF010, // NOP (This will be skipped by the JMP)
-    0x0000  // HALT (Instruction 0)
+    0xF001, // NOP
+    0xF002, // NOP
+    0xA000, // JMP back to address 000
+    0x0000, 
+    0x0000,
+    0x0000
 };
 
 uint8_t get_instruction()
@@ -107,10 +107,16 @@ void emulateCycle()
     clock_pulse = 1;
 }
 
-void dumpRegisters()
-{
-    printf("PC: %04x A: %04x IR: %04x MAR: %04x MBR: %04x\n", 
-            PC, A, IR, MAR, MBR);
+void dumpRegisters() {
+    // \033[H moves cursor to top, \033[J clears from cursor down
+    printf("\033[H\033[J"); 
+    printf("\033[1;34m===============================\n"); // Blue color
+    printf("   BLUE ARCHITECTURE MONITOR   \n");
+    printf("===============================\033[0m\n");
+    printf(" PC  : [ 0x%04x ]\n", PC);
+    printf(" IR  : [ 0x%04x ]\n", IR);
+    printf(" A   : [ 0x%04x ]\n", A);
+    printf("-------------------------------\n");
 }
 
 void runProgram(const uint16_t* program)
@@ -128,7 +134,7 @@ void runProgram(const uint16_t* program)
         emulateCycle();
         dumpRegisters();
         if (IR == 0) break; // Stop if we hit a 0000 instruction
-        usleep(100000);     // Small delay to see it run
+        usleep(500000);     // Small delay to see it run
     }
 }
 
