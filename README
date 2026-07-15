@@ -1,0 +1,27 @@
+# mini-emulator
+
+A CHIP-8 emulator written in C++. Parses and executes CHIP-8 opcodes, including memory management, the call stack, timers, and display rendering, and outputs the display directly to the terminal using ASCII characters.
+
+Includes several classic CHIP-8 ROMs (Pong variants) for testing.
+
+## Build
+
+```
+g++ -o chip8 chip8.cpp
+```
+
+## Run
+
+```
+./chip8 "Pong (1 player).ch8"
+```
+
+The display renders in the terminal, refreshing continuously. Press `Ctrl+C` to exit.
+
+## Status
+
+This is a work-in-progress implementation. Core opcode decoding, memory, the display buffer, and the draw/render loop are functional. Keyboard input handling is not yet implemented, so ROMs that depend on player input (e.g. Pong's paddle controls) will run and render but cannot currently be controlled.
+
+## Notes
+
+`main.cpp` is a separate file used for local environment testing and is not part of the emulator itself.
